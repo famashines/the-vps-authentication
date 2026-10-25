@@ -1,7 +1,9 @@
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import * as oidc from "openid-client";
+import { randomUUID } from "node:crypto";
 import { sealer } from "./seal.ts";
+import { fieldErrors, validRegisterStudent } from "./validate.ts";
 
 export type Settings = {
   appUrl: string;
@@ -9,6 +11,7 @@ export type Settings = {
   clientId: string;
   clientSecret: string;
   sessionKey: string;
+  admissionsUrl: string;
   oidcConfig?: () => Promise<oidc.Configuration>;
 };
 
@@ -131,7 +134,43 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
     return { sub, name, roles };
   });
 
-  app.get("/api/students", { preHandler: requireRole("admin") }, async () => []);
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const admissions = async (reply: FastifyReply, path: string, init?: RequestInit) => {
+    try {
+      const response = await fetch(`${settings.admissionsUrl}${path}`, { ...init, signal: AbortSignal.timeout(10_000) });
+      return reply.code(response.status).type("application/json").send(await response.text());
+    } catch (error) {
+      reply.log.error({ err: error }, "admissions service unreachable");
+      return reply.code(502).send({ error: "The admissions service did not answer. Try again in a minute." });
+    }
+  };
+
+  app.get("/api/students", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/students"));
+
+  app.post("/api/students", { preHandler: requireRole("admin") }, async (request, reply) => {
+    const commandId = request.headers["idempotency-key"];
+    if (typeof commandId !== "string" || !uuid.test(commandId)) {
+      return reply.code(400).send({ error: "The Idempotency-Key header must be a UUID." });
+    }
+    if (!validRegisterStudent(request.body)) {
+      return reply.code(400).send({ error: "Check the marked fields.", fields: fieldErrors(validRegisterStudent.errors) });
+    }
+    const command = {
+      commandId,
+      commandType: "admissions.RegisterStudent",
+      version: 1,
+      issuedAt: new Date().toISOString(),
+      issuedBy: request.session!.sub,
+      correlationId: randomUUID(),
+      payload: request.body,
+    };
+    return admissions(reply, "/commands/register-student", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(command),
+    });
+  });
 
   return app;
 }
