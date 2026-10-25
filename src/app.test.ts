@@ -134,6 +134,7 @@ test("logout: other origins are refused; our origin clears the session and ends 
 const student = {
   firstName: "Ayesha",
   lastName: "Khan",
+  fatherName: "Imran Khan",
   dateOfBirth: "2016-03-14",
   gender: "female",
   guardian: { name: "Imran Khan", relation: "father", phone: "+923001234567" },
