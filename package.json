@@ -11,7 +11,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@famashines/the-vps-contracts": "github:famashines/the-vps-contracts#v0.3.0",
+    "@famashines/the-vps-contracts": "github:famashines/the-vps-contracts#v0.4.0",
     "@fastify/cookie": "11.1.3",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
@@ -23,6 +23,6 @@
     "typescript": "7.0.2"
   },
   "allowScripts": {
-    "github:famashines/the-vps-contracts#25c7fa5c1c590d765fe97419045380964a7590d1": true
+    "github:famashines/the-vps-contracts#0377a238779b695350b18fa54911f1d512aaa6d6": true
   }
 }
