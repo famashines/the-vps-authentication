@@ -35,6 +35,13 @@ checks the types.
 | PUT    | `/api/enrollments/:enrollmentId` | role `admin` | `ChangeStudentSectionCommandPayloadV1`, the same rules |
 | PUT    | `/api/class-sections/:classSectionId` | role `admin` | `UpdateClassSectionCommandPayloadV1`, the same rules |
 | PUT    | `/api/academic-years/:academicYearId` | role `admin` | `UpdateAcademicYearCommandPayloadV1`, the same rules |
+| GET    | `/api/fees/schedules` | role `admin`  | The fee schedules, from the fees service |
+| POST   | `/api/fees/schedules` | role `admin`  | `SetFeeScheduleCommandPayloadV1`, the same rules as `POST /api/students` |
+| GET    | `/api/fees/accounts`  | role `admin`  | All fee accounts with their balance |
+| GET    | `/api/fees/accounts/:accountId` | role `admin` | One account with its charges and payments; 404 for an id that is not a UUID |
+| POST   | `/api/fees/payments`  | role `admin`  | `ReceivePaymentCommandPayloadV1`, the same rules |
+| POST   | `/api/fees/charges/:chargeId/reversal` | role `admin` | `ReverseChargeCommandPayloadV1` (only `reason` in the body) |
+| POST   | `/api/fees/payments/:paymentId/reversal` | role `admin` | `ReversePaymentCommandPayloadV1` (only `reason` in the body) |
 
 ## Session
 
@@ -54,6 +61,7 @@ must have `Origin` equal to `APP_URL`.
 | `OIDC_CLIENT_SECRET` | secret                                      |
 | `SESSION_KEY`        | secret, 32 bytes in base64                  |
 | `ADMISSIONS_URL`     | `http://the-vps-admissions`                 |
+| `FEES_URL`           | `http://the-vps-fees`                       |
 
 ## Release
 

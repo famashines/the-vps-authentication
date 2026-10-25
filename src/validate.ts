@@ -7,6 +7,10 @@ import {
   UpdateAcademicYearCommandPayloadV1Schema,
   UpdateClassSectionCommandPayloadV1Schema,
   UpdateStudentDetailsCommandPayloadV1Schema,
+  ReceivePaymentCommandPayloadV1Schema,
+  ReverseChargeCommandPayloadV1Schema,
+  ReversePaymentCommandPayloadV1Schema,
+  SetFeeScheduleCommandPayloadV1Schema,
 } from "@famashines/the-vps-contracts";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -24,6 +28,10 @@ export const validUpdateStudentDetails = compile(UpdateStudentDetailsCommandPayl
 export const validChangeStudentSection = compile(ChangeStudentSectionCommandPayloadV1Schema);
 export const validUpdateClassSection = compile(UpdateClassSectionCommandPayloadV1Schema);
 export const validUpdateAcademicYear = compile(UpdateAcademicYearCommandPayloadV1Schema);
+export const validSetFeeSchedule = compile(SetFeeScheduleCommandPayloadV1Schema);
+export const validReceivePayment = compile(ReceivePaymentCommandPayloadV1Schema);
+export const validReverseCharge = compile(ReverseChargeCommandPayloadV1Schema);
+export const validReversePayment = compile(ReversePaymentCommandPayloadV1Schema);
 
 export function fieldErrors(errors: ErrorObject[] | null | undefined) {
   const all = (errors ?? []).map((e) => {

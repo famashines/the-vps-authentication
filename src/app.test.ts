@@ -32,13 +32,25 @@ fakeAdmissions.post("/commands/register-student", async (request, reply) => {
   received.push(request.body as Record<string, any>);
   return reply.code(201).send({ studentId: "s2", admissionNumber: "2026-0001" });
 });
+const fakeFees = Fastify();
+fakeFees.get("/accounts", async () => [{ accountId: "a1" }]);
+fakeFees.get("/fee-schedules", async () => [{ grade: "class-3" }]);
+fakeFees.get("/accounts/:id", async (request) => ({ accountId: (request.params as { id: string }).id }));
+for (const path of ["set-fee-schedule", "receive-payment", "reverse-charge", "reverse-payment"]) {
+  fakeFees.post(`/commands/${path}`, async (request, reply) => {
+    received.push({ path, ...(request.body as Record<string, any>) });
+    return reply.code(201).send({ ok: path });
+  });
+}
 let admissionsUrl = "";
+let feesUrl = "";
 before(async () => {
   admissionsUrl = await fakeAdmissions.listen({ host: "127.0.0.1", port: 0 });
+  feesUrl = await fakeFees.listen({ host: "127.0.0.1", port: 0 });
 });
-after(() => fakeAdmissions.close());
+after(() => Promise.all([fakeAdmissions.close(), fakeFees.close()]));
 
-const app = (overrides: { admissionsUrl?: string } = {}) =>
+const app = (overrides: { admissionsUrl?: string; feesUrl?: string } = {}) =>
   buildApp({
     appUrl,
     issuer: "https://idp.test/realms/the-vps",
@@ -46,6 +58,7 @@ const app = (overrides: { admissionsUrl?: string } = {}) =>
     clientSecret: "secret",
     sessionKey,
     admissionsUrl: overrides.admissionsUrl ?? admissionsUrl,
+    feesUrl: overrides.feesUrl ?? feesUrl,
     oidcConfig: async () => idp,
   });
 
@@ -250,4 +263,38 @@ test("edit routes: no version, a bad id, a student user or a foreign origin are 
   assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["student"])).statusCode, 403);
   assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["admin"], "https://evil.test")).statusCode, 403);
   assert.equal(received.length, 0);
+});
+
+test("fee routes: each command goes to the fees service with its type, ids from the path", async () => {
+  received.length = 0;
+  const id = "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69";
+  const rs = (n: number) => ({ amount: n * 100, currency: "PKR" });
+  assert.equal((await post("/api/fees/schedules", { academicYearId: id, grade: "class-3", monthlyFee: rs(4500) })).statusCode, 201);
+  assert.equal((await post("/api/fees/payments", { accountId: id, amount: rs(4500), method: "cash" })).statusCode, 201);
+  assert.equal((await post(`/api/fees/charges/${id}/reversal`, { reason: "Charged twice" })).statusCode, 201);
+  assert.equal((await post(`/api/fees/payments/${id}/reversal`, { reason: "Entered twice" })).statusCode, 201);
+  assert.deepEqual(
+    received.map((r) => `${r.path} ${r.commandType} ${r.issuedBy}`),
+    ["set-fee-schedule fees.SetFeeSchedule u1", "receive-payment fees.ReceivePayment u1", "reverse-charge fees.ReverseCharge u1", "reverse-payment fees.ReversePayment u1"],
+  );
+  assert.deepEqual(received[2].payload, { reason: "Charged twice", chargeId: id });
+});
+
+test("fee routes: bad money, a bad id or a teacher are refused before the fees service; reads are proxied", async () => {
+  received.length = 0;
+  const bad = await post("/api/fees/payments", { accountId: key, amount: { amount: 99, currency: "PKR" }, method: "card" });
+  assert.equal(bad.statusCode, 400);
+  assert.deepEqual(bad.json().fields.map((f: { field: string }) => f.field).sort(), ["amount.amount", "method"]);
+  assert.equal((await post("/api/fees/charges/x/reversal", { reason: "x" })).statusCode, 400);
+  assert.equal((await post("/api/fees/payments", { accountId: key, amount: { amount: 100, currency: "PKR" }, method: "cash" }, ["teacher"])).statusCode, 403);
+  assert.equal(received.length, 0);
+  const get = (url: string, roles = ["admin"]) => app().inject({ url, cookies: sessionCookie(roles) });
+  assert.equal((await get("/api/fees/accounts")).json()[0].accountId, "a1");
+  assert.equal((await get("/api/fees/schedules")).json()[0].grade, "class-3");
+  assert.equal((await get(`/api/fees/accounts/${key}`)).json().accountId, key);
+  assert.equal((await get("/api/fees/accounts/..%2Fstudents")).statusCode, 404);
+  assert.equal((await get("/api/fees/accounts", ["student"])).statusCode, 403);
+  const down = await app({ feesUrl: "http://127.0.0.1:9" }).inject({ url: "/api/fees/accounts", cookies: sessionCookie(["admin"]) });
+  assert.equal(down.statusCode, 502);
+  assert.match(down.json().error, /fees service did not answer/);
 });
