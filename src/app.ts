@@ -12,6 +12,7 @@ export type Settings = {
   clientSecret: string;
   sessionKey: string;
   admissionsUrl: string;
+  feesUrl: string;
   oidcConfig?: () => Promise<oidc.Configuration>;
 };
 
@@ -136,19 +137,21 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
 
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const admissions = async (reply: FastifyReply, path: string, init?: RequestInit) => {
+  const service = (name: string, base: string) => async (reply: FastifyReply, path: string, init?: RequestInit) => {
     try {
-      const response = await fetch(`${settings.admissionsUrl}${path}`, { ...init, signal: AbortSignal.timeout(10_000) });
+      const response = await fetch(`${base}${path}`, { ...init, signal: AbortSignal.timeout(10_000) });
       return reply.code(response.status).type("application/json").send(await response.text());
     } catch (error) {
-      reply.log.error({ err: error }, "admissions service unreachable");
-      return reply.code(502).send({ error: "The admissions service did not answer. Try again in a minute." });
+      reply.log.error({ err: error }, `${name} service unreachable`);
+      return reply.code(502).send({ error: `The ${name} service did not answer. Try again in a minute.` });
     }
   };
+  const admissions = service("admissions", settings.admissionsUrl);
+  const fees = service("fees", settings.feesUrl);
 
   app.get("/api/students", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/students"));
 
-  const command = (method: "POST" | "PUT", path: string, commandType: string, validPayload: typeof valid.validRegisterStudent, target: string) =>
+  const command = (method: "POST" | "PUT", path: string, commandType: string, validPayload: typeof valid.validRegisterStudent, target: string, send = admissions) =>
     app.route({ method, url: path, preHandler: requireRole("admin"), handler: async (request, reply) => {
       const commandId = request.headers["idempotency-key"];
       if (typeof commandId !== "string" || !uuid.test(commandId)) {
@@ -167,7 +170,7 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
         correlationId: randomUUID(),
         payload,
       };
-      return admissions(reply, target, {
+      return send(reply, target, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(envelope),
@@ -184,6 +187,17 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
   command("PUT", "/api/academic-years/:academicYearId", "admissions.UpdateAcademicYear", valid.validUpdateAcademicYear, "/commands/update-academic-year");
 
   app.get("/api/academic-years", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/academic-years"));
+
+  command("POST", "/api/fees/schedules", "fees.SetFeeSchedule", valid.validSetFeeSchedule, "/commands/set-fee-schedule", fees);
+  command("POST", "/api/fees/payments", "fees.ReceivePayment", valid.validReceivePayment, "/commands/receive-payment", fees);
+  command("POST", "/api/fees/charges/:chargeId/reversal", "fees.ReverseCharge", valid.validReverseCharge, "/commands/reverse-charge", fees);
+  command("POST", "/api/fees/payments/:paymentId/reversal", "fees.ReversePayment", valid.validReversePayment, "/commands/reverse-payment", fees);
+
+  app.get("/api/fees/schedules", { preHandler: requireRole("admin") }, async (_request, reply) => fees(reply, "/fee-schedules"));
+  app.get("/api/fees/accounts", { preHandler: requireRole("admin") }, async (_request, reply) => fees(reply, "/accounts"));
+  app.get<{ Params: { accountId: string } }>("/api/fees/accounts/:accountId", { preHandler: requireRole("admin") }, async (request, reply) =>
+    uuid.test(request.params.accountId) ? fees(reply, `/accounts/${request.params.accountId}`) : reply.code(404).send({ error: "The account does not exist." }),
+  );
 
   return app;
 }

@@ -14,6 +14,7 @@ const app = buildApp(
     clientSecret: env("OIDC_CLIENT_SECRET"),
     sessionKey: env("SESSION_KEY"),
     admissionsUrl: env("ADMISSIONS_URL"),
+    feesUrl: env("FEES_URL"),
   },
   { logger: true },
 );
