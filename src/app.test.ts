@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
+import Fastify from "fastify";
 import * as oidc from "openid-client";
 import { buildApp, LOGIN_COOKIE, SESSION_COOKIE, type Session } from "./app.ts";
 import { sealer } from "./seal.ts";
@@ -17,8 +18,29 @@ const idp = new oidc.Configuration(
   "the-vps-bff",
   "secret",
 );
-const app = () =>
-  buildApp({ appUrl, issuer: "https://idp.test/realms/the-vps", clientId: "the-vps-bff", clientSecret: "secret", sessionKey, oidcConfig: async () => idp });
+const received: Array<Record<string, any>> = [];
+const fakeAdmissions = Fastify();
+fakeAdmissions.get("/students", async () => [{ studentId: "s1" }]);
+fakeAdmissions.post("/commands/register-student", async (request, reply) => {
+  received.push(request.body as Record<string, any>);
+  return reply.code(201).send({ studentId: "s2", admissionNumber: "2026-0001" });
+});
+let admissionsUrl = "";
+before(async () => {
+  admissionsUrl = await fakeAdmissions.listen({ host: "127.0.0.1", port: 0 });
+});
+after(() => fakeAdmissions.close());
+
+const app = (overrides: { admissionsUrl?: string } = {}) =>
+  buildApp({
+    appUrl,
+    issuer: "https://idp.test/realms/the-vps",
+    clientId: "the-vps-bff",
+    clientSecret: "secret",
+    sessionKey,
+    admissionsUrl: overrides.admissionsUrl ?? admissionsUrl,
+    oidcConfig: async () => idp,
+  });
 
 const sessionCookie = (roles: string[], exp = Math.floor(Date.now() / 1000) + 600) => {
   const session: Session = { sub: "u1", name: "Ayesha Khan", roles, idToken: "id.token.value", exp };
@@ -57,7 +79,7 @@ test("the admin API: 401 without a session, 403 for a student, 200 for an admin"
   assert.equal((await app().inject({ url: "/api/students", cookies: sessionCookie(["student"]) })).statusCode, 403);
   const admin = await app().inject({ url: "/api/students", cookies: sessionCookie(["admin"]) });
   assert.equal(admin.statusCode, 200);
-  assert.deepEqual(admin.json(), []);
+  assert.deepEqual(admin.json(), [{ studentId: "s1" }]);
 });
 
 test("login redirects to Keycloak with PKCE and sets a short login cookie", async () => {
@@ -100,4 +122,58 @@ test("logout: other origins are refused; our origin clears the session and ends 
   assert.equal(redirect.searchParams.get("post_logout_redirect_uri"), `${appUrl}/`);
   const cleared = response.cookies.find((c) => c.name === SESSION_COOKIE)!;
   assert.equal(cleared.value, "");
+});
+
+const student = {
+  firstName: "Ayesha",
+  lastName: "Khan",
+  dateOfBirth: "2016-03-14",
+  gender: "female",
+  guardian: { name: "Imran Khan", relation: "father", phone: "+923001234567" },
+};
+const key = "6f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
+const register = (body: unknown, headers: Record<string, string> = { "idempotency-key": key }, roles = ["admin"], instance = app()) =>
+  instance.inject({ method: "POST", url: "/api/students", headers: { origin: appUrl, ...headers }, cookies: sessionCookie(roles), payload: body as object });
+
+test("register: an admin's valid student goes to admissions as a command envelope", async () => {
+  received.length = 0;
+  const response = await register(student);
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(response.json(), { studentId: "s2", admissionNumber: "2026-0001" });
+  const command = received[0];
+  assert.equal(command.commandId, key);
+  assert.equal(command.commandType, "admissions.RegisterStudent");
+  assert.equal(command.version, 1);
+  assert.equal(command.issuedBy, "u1");
+  assert.deepEqual(command.payload, student);
+});
+
+test("register: a student user gets 403 and nothing reaches admissions", async () => {
+  received.length = 0;
+  assert.equal((await register(student, undefined, ["student"])).statusCode, 403);
+  assert.equal(received.length, 0);
+});
+
+test("register: wrong fields come back by name, and nothing reaches admissions", async () => {
+  received.length = 0;
+  const response = await register({ ...student, dateOfBirth: "2016-02-30", guardian: { name: "Imran Khan", relation: "father" }, grade: "3" });
+  assert.equal(response.statusCode, 400);
+  const fields = response.json().fields.map((f: { field: string }) => f.field).sort();
+  assert.deepEqual(fields, ["dateOfBirth", "grade", "guardian.phone"]);
+  assert.equal(received.length, 0);
+});
+
+test("register: the Idempotency-Key must be a UUID", async () => {
+  assert.equal((await register(student, {})).statusCode, 400);
+  assert.equal((await register(student, { "idempotency-key": "1" })).statusCode, 400);
+});
+
+test("register: a foreign origin is refused", async () => {
+  assert.equal((await register(student, { "idempotency-key": key, origin: "https://evil.test" })).statusCode, 403);
+});
+
+test("register: admissions down gives 502 with a clear message", async () => {
+  const response = await register(student, undefined, ["admin"], app({ admissionsUrl: "http://127.0.0.1:9" }));
+  assert.equal(response.statusCode, 502);
+  assert.match(response.json().error, /did not answer/);
 });

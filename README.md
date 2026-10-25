@@ -23,7 +23,8 @@ checks the types.
 | GET    | `/api/auth/callback` | Keycloak       | Sets the session cookie, then redirects to `returnTo`      |
 | POST   | `/api/auth/logout`   | signed in      | Clears the cookie; `{"redirect": "<Keycloak logout URL>"}` |
 | GET    | `/api/me`            | signed in      | `{"sub","name","roles"}`, or 401                           |
-| GET    | `/api/students`      | role `admin`   | `[]` until T9; 401 or 403 for others                       |
+| GET    | `/api/students`      | role `admin`   | The list from the admissions service; 401 or 403 for others |
+| POST   | `/api/students`      | role `admin`   | Body: `RegisterStudentCommandPayloadV1`, header `Idempotency-Key: <uuid>` (the `commandId`). 400 with `fields` when invalid, else the answer of admissions (201, or 200 for a repeated key), 502 when it does not answer |
 
 ## Session
 
@@ -42,6 +43,7 @@ must have `Origin` equal to `APP_URL`.
 | `OIDC_CLIENT_ID`     | `the-vps-bff`                               |
 | `OIDC_CLIENT_SECRET` | secret                                      |
 | `SESSION_KEY`        | secret, 32 bytes in base64                  |
+| `ADMISSIONS_URL`     | `http://the-vps-admissions`                 |
 
 ## Release
 
