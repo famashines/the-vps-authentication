@@ -6,6 +6,6 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src
 ARG RELEASE=local
 ENV RELEASE=$RELEASE
-USER node
+USER 1000:1000
 EXPOSE 8080
 CMD ["node", "src/server.ts"]
