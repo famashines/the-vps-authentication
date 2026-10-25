@@ -1,8 +1,10 @@
-# the-vps-authentication
+# the-vps-gateway
 
-The BFF (backend for frontend) of the-vps. The browser talks only to this
-service, at `/api` on the same host as the dashboard. Later it does the login
-with Keycloak (T7) and sends commands to the other services (T9).
+The gateway of the-vps: the BFF (backend for frontend) of the dashboard. The
+browser talks only to this service, at `/api` on the same host. It does the
+login with Keycloak (`/api/auth/*`, a sealed session cookie), checks the role
+and the schema of each request, and sends commands to the services inside the
+cluster. It was named the-vps-authentication until 2026-10-25.
 
 Fastify and TypeScript. Node 24 runs the `.ts` files directly; `tsc` only
 checks the types.
@@ -51,6 +53,6 @@ must have `Origin` equal to `APP_URL`.
 
 ## Release
 
-A merge to `main` builds `ghcr.io/famashines/the-vps-authentication:sha-<commit>`
+A merge to `main` builds `ghcr.io/famashines/the-vps-gateway:sha-<commit>`
 and releases it to dev through a pull request in `famashines/gitops`. Each pull
 request runs the type check, the tests and an image build.
