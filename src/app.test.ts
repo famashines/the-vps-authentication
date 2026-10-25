@@ -22,7 +22,7 @@ const received: Array<Record<string, any>> = [];
 const fakeAdmissions = Fastify();
 fakeAdmissions.get("/students", async () => [{ studentId: "s1" }]);
 fakeAdmissions.get("/academic-years", async () => [{ academicYearId: "y1", name: "2026-27", sections: [] }]);
-for (const path of ["open-academic-year", "create-class-section", "enroll-student"]) {
+for (const path of ["open-academic-year", "create-class-section", "enroll-student", "update-student-details", "change-student-section", "update-class-section", "update-academic-year"]) {
   fakeAdmissions.post(`/commands/${path}`, async (request, reply) => {
     received.push({ path, ...(request.body as Record<string, any>) });
     return reply.code(201).send({ ok: path });
@@ -215,4 +215,39 @@ test("enrollment routes: wrong payloads come back by field, students get 403, th
   assert.equal(years.statusCode, 200);
   assert.equal(years.json()[0].name, "2026-27");
   assert.equal((await app().inject({ url: "/api/academic-years", cookies: sessionCookie(["teacher"]) })).statusCode, 403);
+});
+
+const put = (url: string, body: object, roles = ["admin"], origin = appUrl) =>
+  app().inject({ method: "PUT", url, headers: { origin, "idempotency-key": key }, cookies: sessionCookie(roles), payload: body });
+
+test("edit routes: the id in the path goes into the payload, each command goes to its admissions path", async () => {
+  received.length = 0;
+  const id = "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69";
+  const other = "9c8b7a6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d";
+  assert.equal((await put(`/api/students/${id}`, { ...student, studentId: other, expectedVersion: 2 })).statusCode, 201);
+  assert.equal((await put(`/api/enrollments/${id}`, { classSectionId: other, expectedVersion: 1 })).statusCode, 201);
+  assert.equal((await put(`/api/class-sections/${id}`, { grade: "class-3", section: "Blue", expectedVersion: 1 })).statusCode, 201);
+  assert.equal((await put(`/api/academic-years/${id}`, { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31", expectedVersion: 1 })).statusCode, 201);
+  assert.deepEqual(
+    received.map((r) => `${r.path} ${r.commandType}`),
+    [
+      "update-student-details admissions.UpdateStudentDetails",
+      "change-student-section admissions.ChangeStudentSection",
+      "update-class-section admissions.UpdateClassSection",
+      "update-academic-year admissions.UpdateAcademicYear",
+    ],
+  );
+  assert.deepEqual(received[0].payload, { ...student, studentId: id, expectedVersion: 2 });
+  assert.deepEqual(received[1].payload, { enrollmentId: id, classSectionId: other, expectedVersion: 1 });
+});
+
+test("edit routes: no version, a bad id, a student user or a foreign origin are refused before admissions", async () => {
+  received.length = 0;
+  const noVersion = await put("/api/class-sections/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { grade: "class-3", section: "Blue" });
+  assert.equal(noVersion.statusCode, 400);
+  assert.deepEqual(noVersion.json().fields.map((f: { field: string }) => f.field), ["expectedVersion"]);
+  assert.equal((await put("/api/academic-years/x", { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31", expectedVersion: 1 })).statusCode, 400);
+  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["student"])).statusCode, 403);
+  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["admin"], "https://evil.test")).statusCode, 403);
+  assert.equal(received.length, 0);
 });

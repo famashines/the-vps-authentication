@@ -3,7 +3,7 @@ import Fastify, { type FastifyReply, type FastifyRequest, type FastifyServerOpti
 import * as oidc from "openid-client";
 import { randomUUID } from "node:crypto";
 import { sealer } from "./seal.ts";
-import { fieldErrors, validCreateClassSection, validEnrollStudent, validOpenAcademicYear, validRegisterStudent } from "./validate.ts";
+import * as valid from "./validate.ts";
 
 export type Settings = {
   appUrl: string;
@@ -148,14 +148,15 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
 
   app.get("/api/students", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/students"));
 
-  const command = (path: string, commandType: string, validPayload: typeof validRegisterStudent, target: string) =>
-    app.post(path, { preHandler: requireRole("admin") }, async (request, reply) => {
+  const command = (method: "POST" | "PUT", path: string, commandType: string, validPayload: typeof valid.validRegisterStudent, target: string) =>
+    app.route({ method, url: path, preHandler: requireRole("admin"), handler: async (request, reply) => {
       const commandId = request.headers["idempotency-key"];
       if (typeof commandId !== "string" || !uuid.test(commandId)) {
         return reply.code(400).send({ error: "The Idempotency-Key header must be a UUID." });
       }
-      if (!validPayload(request.body)) {
-        return reply.code(400).send({ error: "Check the marked fields.", fields: fieldErrors(validPayload.errors) });
+      const payload = { ...(request.body as object), ...(request.params as object) };
+      if (!validPayload(payload)) {
+        return reply.code(400).send({ error: "Check the marked fields.", fields: valid.fieldErrors(validPayload.errors) });
       }
       const envelope = {
         commandId,
@@ -164,19 +165,23 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
         issuedAt: new Date().toISOString(),
         issuedBy: request.session!.sub,
         correlationId: randomUUID(),
-        payload: request.body,
+        payload,
       };
       return admissions(reply, target, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(envelope),
       });
-    });
+    } });
 
-  command("/api/students", "admissions.RegisterStudent", validRegisterStudent, "/commands/register-student");
-  command("/api/academic-years", "admissions.OpenAcademicYear", validOpenAcademicYear, "/commands/open-academic-year");
-  command("/api/class-sections", "admissions.CreateClassSection", validCreateClassSection, "/commands/create-class-section");
-  command("/api/enrollments", "admissions.EnrollStudent", validEnrollStudent, "/commands/enroll-student");
+  command("POST", "/api/students", "admissions.RegisterStudent", valid.validRegisterStudent, "/commands/register-student");
+  command("POST", "/api/academic-years", "admissions.OpenAcademicYear", valid.validOpenAcademicYear, "/commands/open-academic-year");
+  command("POST", "/api/class-sections", "admissions.CreateClassSection", valid.validCreateClassSection, "/commands/create-class-section");
+  command("POST", "/api/enrollments", "admissions.EnrollStudent", valid.validEnrollStudent, "/commands/enroll-student");
+  command("PUT", "/api/students/:studentId", "admissions.UpdateStudentDetails", valid.validUpdateStudentDetails, "/commands/update-student-details");
+  command("PUT", "/api/enrollments/:enrollmentId", "admissions.ChangeStudentSection", valid.validChangeStudentSection, "/commands/change-student-section");
+  command("PUT", "/api/class-sections/:classSectionId", "admissions.UpdateClassSection", valid.validUpdateClassSection, "/commands/update-class-section");
+  command("PUT", "/api/academic-years/:academicYearId", "admissions.UpdateAcademicYear", valid.validUpdateAcademicYear, "/commands/update-academic-year");
 
   app.get("/api/academic-years", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/academic-years"));
 

@@ -31,6 +31,10 @@ checks the types.
 | POST   | `/api/academic-years` | role `admin`  | `OpenAcademicYearCommandPayloadV1`, the same rules as `POST /api/students` |
 | POST   | `/api/class-sections` | role `admin`  | `CreateClassSectionCommandPayloadV1`, the same rules       |
 | POST   | `/api/enrollments`    | role `admin`  | `EnrollStudentCommandPayloadV1`, the same rules            |
+| PUT    | `/api/students/:studentId` | role `admin` | `UpdateStudentDetailsCommandPayloadV1` without `studentId` (the path gives it), the same rules. 409 when `expectedVersion` is old |
+| PUT    | `/api/enrollments/:enrollmentId` | role `admin` | `ChangeStudentSectionCommandPayloadV1`, the same rules |
+| PUT    | `/api/class-sections/:classSectionId` | role `admin` | `UpdateClassSectionCommandPayloadV1`, the same rules |
+| PUT    | `/api/academic-years/:academicYearId` | role `admin` | `UpdateAcademicYearCommandPayloadV1`, the same rules |
 
 ## Session
 
