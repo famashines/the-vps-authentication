@@ -3,7 +3,7 @@ import Fastify, { type FastifyReply, type FastifyRequest, type FastifyServerOpti
 import * as oidc from "openid-client";
 import { randomUUID } from "node:crypto";
 import { sealer } from "./seal.ts";
-import { fieldErrors, validRegisterStudent } from "./validate.ts";
+import { fieldErrors, validCreateClassSection, validEnrollStudent, validOpenAcademicYear, validRegisterStudent } from "./validate.ts";
 
 export type Settings = {
   appUrl: string;
@@ -148,29 +148,37 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
 
   app.get("/api/students", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/students"));
 
-  app.post("/api/students", { preHandler: requireRole("admin") }, async (request, reply) => {
-    const commandId = request.headers["idempotency-key"];
-    if (typeof commandId !== "string" || !uuid.test(commandId)) {
-      return reply.code(400).send({ error: "The Idempotency-Key header must be a UUID." });
-    }
-    if (!validRegisterStudent(request.body)) {
-      return reply.code(400).send({ error: "Check the marked fields.", fields: fieldErrors(validRegisterStudent.errors) });
-    }
-    const command = {
-      commandId,
-      commandType: "admissions.RegisterStudent",
-      version: 1,
-      issuedAt: new Date().toISOString(),
-      issuedBy: request.session!.sub,
-      correlationId: randomUUID(),
-      payload: request.body,
-    };
-    return admissions(reply, "/commands/register-student", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(command),
+  const command = (path: string, commandType: string, validPayload: typeof validRegisterStudent, target: string) =>
+    app.post(path, { preHandler: requireRole("admin") }, async (request, reply) => {
+      const commandId = request.headers["idempotency-key"];
+      if (typeof commandId !== "string" || !uuid.test(commandId)) {
+        return reply.code(400).send({ error: "The Idempotency-Key header must be a UUID." });
+      }
+      if (!validPayload(request.body)) {
+        return reply.code(400).send({ error: "Check the marked fields.", fields: fieldErrors(validPayload.errors) });
+      }
+      const envelope = {
+        commandId,
+        commandType,
+        version: 1,
+        issuedAt: new Date().toISOString(),
+        issuedBy: request.session!.sub,
+        correlationId: randomUUID(),
+        payload: request.body,
+      };
+      return admissions(reply, target, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(envelope),
+      });
     });
-  });
+
+  command("/api/students", "admissions.RegisterStudent", validRegisterStudent, "/commands/register-student");
+  command("/api/academic-years", "admissions.OpenAcademicYear", validOpenAcademicYear, "/commands/open-academic-year");
+  command("/api/class-sections", "admissions.CreateClassSection", validCreateClassSection, "/commands/create-class-section");
+  command("/api/enrollments", "admissions.EnrollStudent", validEnrollStudent, "/commands/enroll-student");
+
+  app.get("/api/academic-years", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/academic-years"));
 
   return app;
 }

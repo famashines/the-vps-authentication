@@ -25,6 +25,10 @@ checks the types.
 | GET    | `/api/me`            | signed in      | `{"sub","name","roles"}`, or 401                           |
 | GET    | `/api/students`      | role `admin`   | The list from the admissions service; 401 or 403 for others |
 | POST   | `/api/students`      | role `admin`   | Body: `RegisterStudentCommandPayloadV1`, header `Idempotency-Key: <uuid>` (the `commandId`). 400 with `fields` when invalid, else the answer of admissions (201, or 200 for a repeated key), 502 when it does not answer |
+| GET    | `/api/academic-years` | role `admin`  | Years with their sections, from admissions                 |
+| POST   | `/api/academic-years` | role `admin`  | `OpenAcademicYearCommandPayloadV1`, the same rules as `POST /api/students` |
+| POST   | `/api/class-sections` | role `admin`  | `CreateClassSectionCommandPayloadV1`, the same rules       |
+| POST   | `/api/enrollments`    | role `admin`  | `EnrollStudentCommandPayloadV1`, the same rules            |
 
 ## Session
 

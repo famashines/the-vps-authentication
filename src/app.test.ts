@@ -21,6 +21,13 @@ const idp = new oidc.Configuration(
 const received: Array<Record<string, any>> = [];
 const fakeAdmissions = Fastify();
 fakeAdmissions.get("/students", async () => [{ studentId: "s1" }]);
+fakeAdmissions.get("/academic-years", async () => [{ academicYearId: "y1", name: "2026-27", sections: [] }]);
+for (const path of ["open-academic-year", "create-class-section", "enroll-student"]) {
+  fakeAdmissions.post(`/commands/${path}`, async (request, reply) => {
+    received.push({ path, ...(request.body as Record<string, any>) });
+    return reply.code(201).send({ ok: path });
+  });
+}
 fakeAdmissions.post("/commands/register-student", async (request, reply) => {
   received.push(request.body as Record<string, any>);
   return reply.code(201).send({ studentId: "s2", admissionNumber: "2026-0001" });
@@ -176,4 +183,35 @@ test("register: admissions down gives 502 with a clear message", async () => {
   const response = await register(student, undefined, ["admin"], app({ admissionsUrl: "http://127.0.0.1:9" }));
   assert.equal(response.statusCode, 502);
   assert.match(response.json().error, /did not answer/);
+});
+
+const post = (url: string, body: object, roles = ["admin"]) =>
+  app().inject({ method: "POST", url, headers: { origin: appUrl, "idempotency-key": key }, cookies: sessionCookie(roles), payload: body });
+
+test("enrollment routes: each command goes to its admissions path with its type", async () => {
+  received.length = 0;
+  const year = { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31" };
+  const section = { academicYearId: "5b1f0e2a-3c4d-4e5f-8a6b-7c8d9e0f1a2b", grade: "class-3", section: "A" };
+  const enroll = { studentId: "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", classSectionId: "9c8b7a6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d" };
+  assert.equal((await post("/api/academic-years", year)).statusCode, 201);
+  assert.equal((await post("/api/class-sections", section)).statusCode, 201);
+  assert.equal((await post("/api/enrollments", enroll)).statusCode, 201);
+  assert.deepEqual(
+    received.map((r) => `${r.path} ${r.commandType} ${r.issuedBy}`),
+    ["open-academic-year admissions.OpenAcademicYear u1", "create-class-section admissions.CreateClassSection u1", "enroll-student admissions.EnrollStudent u1"],
+  );
+  assert.deepEqual(received[2].payload, enroll);
+});
+
+test("enrollment routes: wrong payloads come back by field, students get 403, the list is proxied", async () => {
+  received.length = 0;
+  const bad = await post("/api/class-sections", { academicYearId: "x", grade: "class-11", section: "" });
+  assert.equal(bad.statusCode, 400);
+  assert.deepEqual(bad.json().fields.map((f: { field: string }) => f.field).sort(), ["academicYearId", "grade", "section"]);
+  assert.equal((await post("/api/enrollments", { studentId: key, classSectionId: key }, ["student"])).statusCode, 403);
+  assert.equal(received.length, 0);
+  const years = await app().inject({ url: "/api/academic-years", cookies: sessionCookie(["admin"]) });
+  assert.equal(years.statusCode, 200);
+  assert.equal(years.json()[0].name, "2026-27");
+  assert.equal((await app().inject({ url: "/api/academic-years", cookies: sessionCookie(["teacher"]) })).statusCode, 403);
 });
