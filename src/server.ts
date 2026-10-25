@@ -1,6 +1,21 @@
 import { buildApp } from "./app.ts";
 
-const app = buildApp({ logger: true });
+const env = (name: string) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is not set`);
+  return value;
+};
+
+const app = buildApp(
+  {
+    appUrl: env("APP_URL"),
+    issuer: env("OIDC_ISSUER"),
+    clientId: env("OIDC_CLIENT_ID"),
+    clientSecret: env("OIDC_CLIENT_SECRET"),
+    sessionKey: env("SESSION_KEY"),
+  },
+  { logger: true },
+);
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, async () => {
