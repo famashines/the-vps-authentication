@@ -179,11 +179,11 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
 
   command("POST", "/api/students", "admissions.RegisterStudent", valid.validRegisterStudent, "/commands/register-student");
   command("POST", "/api/academic-years", "admissions.OpenAcademicYear", valid.validOpenAcademicYear, "/commands/open-academic-year");
-  command("POST", "/api/class-sections", "admissions.CreateClassSection", valid.validCreateClassSection, "/commands/create-class-section");
+  command("POST", "/api/classes", "admissions.OpenClass", valid.validOpenClass, "/commands/open-class");
+  command("POST", "/api/classes/:classId/closure", "admissions.CloseClass", valid.validCloseClass, "/commands/close-class");
   command("POST", "/api/enrollments", "admissions.EnrollStudent", valid.validEnrollStudent, "/commands/enroll-student");
   command("PUT", "/api/students/:studentId", "admissions.UpdateStudentDetails", valid.validUpdateStudentDetails, "/commands/update-student-details");
-  command("PUT", "/api/enrollments/:enrollmentId", "admissions.ChangeStudentSection", valid.validChangeStudentSection, "/commands/change-student-section");
-  command("PUT", "/api/class-sections/:classSectionId", "admissions.UpdateClassSection", valid.validUpdateClassSection, "/commands/update-class-section");
+  command("PUT", "/api/enrollments/:enrollmentId", "admissions.ChangeStudentClass", valid.validChangeStudentClass, "/commands/change-student-class");
   command("PUT", "/api/academic-years/:academicYearId", "admissions.UpdateAcademicYear", valid.validUpdateAcademicYear, "/commands/update-academic-year");
 
   app.get("/api/academic-years", { preHandler: requireRole("admin") }, async (_request, reply) => admissions(reply, "/academic-years"));

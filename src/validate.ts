@@ -1,11 +1,11 @@
 import {
-  CreateClassSectionCommandPayloadV1Schema,
+  ChangeStudentClassCommandPayloadV1Schema,
+  CloseClassCommandPayloadV1Schema,
   EnrollStudentCommandPayloadV1Schema,
   OpenAcademicYearCommandPayloadV1Schema,
+  OpenClassCommandPayloadV1Schema,
   RegisterStudentCommandPayloadV1Schema,
-  ChangeStudentSectionCommandPayloadV1Schema,
   UpdateAcademicYearCommandPayloadV1Schema,
-  UpdateClassSectionCommandPayloadV1Schema,
   UpdateStudentDetailsCommandPayloadV1Schema,
   ReceivePaymentCommandPayloadV1Schema,
   ReverseChargeCommandPayloadV1Schema,
@@ -22,11 +22,11 @@ const compile = (schema: object) => ajv.compile(structuredClone(schema));
 
 export const validRegisterStudent = compile(RegisterStudentCommandPayloadV1Schema);
 export const validOpenAcademicYear = compile(OpenAcademicYearCommandPayloadV1Schema);
-export const validCreateClassSection = compile(CreateClassSectionCommandPayloadV1Schema);
+export const validOpenClass = compile(OpenClassCommandPayloadV1Schema);
+export const validCloseClass = compile(CloseClassCommandPayloadV1Schema);
 export const validEnrollStudent = compile(EnrollStudentCommandPayloadV1Schema);
 export const validUpdateStudentDetails = compile(UpdateStudentDetailsCommandPayloadV1Schema);
-export const validChangeStudentSection = compile(ChangeStudentSectionCommandPayloadV1Schema);
-export const validUpdateClassSection = compile(UpdateClassSectionCommandPayloadV1Schema);
+export const validChangeStudentClass = compile(ChangeStudentClassCommandPayloadV1Schema);
 export const validUpdateAcademicYear = compile(UpdateAcademicYearCommandPayloadV1Schema);
 export const validSetFeeSchedule = compile(SetFeeScheduleCommandPayloadV1Schema);
 export const validReceivePayment = compile(ReceivePaymentCommandPayloadV1Schema);
