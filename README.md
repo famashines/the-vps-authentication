@@ -27,13 +27,13 @@ checks the types.
 | GET    | `/api/me`            | signed in      | `{"sub","name","roles"}`, or 401                           |
 | GET    | `/api/students`      | role `admin`   | The list from the admissions service; 401 or 403 for others |
 | POST   | `/api/students`      | role `admin`   | Body: `RegisterStudentCommandPayloadV1`, header `Idempotency-Key: <uuid>` (the `commandId`). 400 with `fields` when invalid, else the answer of admissions (201, or 200 for a repeated key), 502 when it does not answer |
-| GET    | `/api/academic-years` | role `admin`  | Years with their sections, from admissions                 |
+| GET    | `/api/academic-years` | role `admin`  | Years with their classes, from admissions                  |
 | POST   | `/api/academic-years` | role `admin`  | `OpenAcademicYearCommandPayloadV1`, the same rules as `POST /api/students` |
-| POST   | `/api/class-sections` | role `admin`  | `CreateClassSectionCommandPayloadV1`, the same rules       |
+| POST   | `/api/classes`        | role `admin`  | `OpenClassCommandPayloadV1`, the same rules                |
+| POST   | `/api/classes/:classId/closure` | role `admin` | `CloseClassCommandPayloadV1` (`expectedVersion`), the same rules. 409 while the class has students |
 | POST   | `/api/enrollments`    | role `admin`  | `EnrollStudentCommandPayloadV1`, the same rules            |
 | PUT    | `/api/students/:studentId` | role `admin` | `UpdateStudentDetailsCommandPayloadV1` without `studentId` (the path gives it), the same rules. 409 when `expectedVersion` is old |
-| PUT    | `/api/enrollments/:enrollmentId` | role `admin` | `ChangeStudentSectionCommandPayloadV1`, the same rules |
-| PUT    | `/api/class-sections/:classSectionId` | role `admin` | `UpdateClassSectionCommandPayloadV1`, the same rules |
+| PUT    | `/api/enrollments/:enrollmentId` | role `admin` | `ChangeStudentClassCommandPayloadV1` (`classId`, `expectedVersion`), the same rules |
 | PUT    | `/api/academic-years/:academicYearId` | role `admin` | `UpdateAcademicYearCommandPayloadV1`, the same rules |
 | GET    | `/api/fees/schedules` | role `admin`  | The fee schedules, from the fees service |
 | POST   | `/api/fees/schedules` | role `admin`  | `SetFeeScheduleCommandPayloadV1`, the same rules as `POST /api/students` |

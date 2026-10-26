@@ -21,8 +21,8 @@ const idp = new oidc.Configuration(
 const received: Array<Record<string, any>> = [];
 const fakeAdmissions = Fastify();
 fakeAdmissions.get("/students", async () => [{ studentId: "s1" }]);
-fakeAdmissions.get("/academic-years", async () => [{ academicYearId: "y1", name: "2026-27", sections: [] }]);
-for (const path of ["open-academic-year", "create-class-section", "enroll-student", "update-student-details", "change-student-section", "update-class-section", "update-academic-year"]) {
+fakeAdmissions.get("/academic-years", async () => [{ academicYearId: "y1", name: "2026-27", classes: [] }]);
+for (const path of ["open-academic-year", "open-class", "close-class", "enroll-student", "update-student-details", "change-student-class", "update-academic-year"]) {
   fakeAdmissions.post(`/commands/${path}`, async (request, reply) => {
     received.push({ path, ...(request.body as Record<string, any>) });
     return reply.code(201).send({ ok: path });
@@ -205,24 +205,26 @@ const post = (url: string, body: object, roles = ["admin"]) =>
 test("enrollment routes: each command goes to its admissions path with its type", async () => {
   received.length = 0;
   const year = { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31" };
-  const section = { academicYearId: "5b1f0e2a-3c4d-4e5f-8a6b-7c8d9e0f1a2b", grade: "class-3", section: "A" };
-  const enroll = { studentId: "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", classSectionId: "9c8b7a6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d" };
+  const opened = { academicYearId: "5b1f0e2a-3c4d-4e5f-8a6b-7c8d9e0f1a2b", grade: "kg-1" };
+  const enroll = { studentId: "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", classId: "9c8b7a6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d" };
   assert.equal((await post("/api/academic-years", year)).statusCode, 201);
-  assert.equal((await post("/api/class-sections", section)).statusCode, 201);
+  assert.equal((await post("/api/classes", opened)).statusCode, 201);
   assert.equal((await post("/api/enrollments", enroll)).statusCode, 201);
+  assert.equal((await post(`/api/classes/${enroll.classId}/closure`, { expectedVersion: 1 })).statusCode, 201);
   assert.deepEqual(
     received.map((r) => `${r.path} ${r.commandType} ${r.issuedBy}`),
-    ["open-academic-year admissions.OpenAcademicYear u1", "create-class-section admissions.CreateClassSection u1", "enroll-student admissions.EnrollStudent u1"],
+    ["open-academic-year admissions.OpenAcademicYear u1", "open-class admissions.OpenClass u1", "enroll-student admissions.EnrollStudent u1", "close-class admissions.CloseClass u1"],
   );
   assert.deepEqual(received[2].payload, enroll);
+  assert.deepEqual(received[3].payload, { classId: enroll.classId, expectedVersion: 1 });
 });
 
 test("enrollment routes: wrong payloads come back by field, students get 403, the list is proxied", async () => {
   received.length = 0;
-  const bad = await post("/api/class-sections", { academicYearId: "x", grade: "class-11", section: "" });
+  const bad = await post("/api/classes", { academicYearId: "x", grade: "nursery", section: "A" });
   assert.equal(bad.statusCode, 400);
   assert.deepEqual(bad.json().fields.map((f: { field: string }) => f.field).sort(), ["academicYearId", "grade", "section"]);
-  assert.equal((await post("/api/enrollments", { studentId: key, classSectionId: key }, ["student"])).statusCode, 403);
+  assert.equal((await post("/api/enrollments", { studentId: key, classId: key }, ["student"])).statusCode, 403);
   assert.equal(received.length, 0);
   const years = await app().inject({ url: "/api/academic-years", cookies: sessionCookie(["admin"]) });
   assert.equal(years.statusCode, 200);
@@ -238,30 +240,28 @@ test("edit routes: the id in the path goes into the payload, each command goes t
   const id = "0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69";
   const other = "9c8b7a6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d";
   assert.equal((await put(`/api/students/${id}`, { ...student, studentId: other, expectedVersion: 2 })).statusCode, 201);
-  assert.equal((await put(`/api/enrollments/${id}`, { classSectionId: other, expectedVersion: 1 })).statusCode, 201);
-  assert.equal((await put(`/api/class-sections/${id}`, { grade: "class-3", section: "Blue", expectedVersion: 1 })).statusCode, 201);
+  assert.equal((await put(`/api/enrollments/${id}`, { classId: other, expectedVersion: 1 })).statusCode, 201);
   assert.equal((await put(`/api/academic-years/${id}`, { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31", expectedVersion: 1 })).statusCode, 201);
   assert.deepEqual(
     received.map((r) => `${r.path} ${r.commandType}`),
     [
       "update-student-details admissions.UpdateStudentDetails",
-      "change-student-section admissions.ChangeStudentSection",
-      "update-class-section admissions.UpdateClassSection",
+      "change-student-class admissions.ChangeStudentClass",
       "update-academic-year admissions.UpdateAcademicYear",
     ],
   );
   assert.deepEqual(received[0].payload, { ...student, studentId: id, expectedVersion: 2 });
-  assert.deepEqual(received[1].payload, { enrollmentId: id, classSectionId: other, expectedVersion: 1 });
+  assert.deepEqual(received[1].payload, { enrollmentId: id, classId: other, expectedVersion: 1 });
 });
 
 test("edit routes: no version, a bad id, a student user or a foreign origin are refused before admissions", async () => {
   received.length = 0;
-  const noVersion = await put("/api/class-sections/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { grade: "class-3", section: "Blue" });
+  const noVersion = await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classId: key });
   assert.equal(noVersion.statusCode, 400);
   assert.deepEqual(noVersion.json().fields.map((f: { field: string }) => f.field), ["expectedVersion"]);
   assert.equal((await put("/api/academic-years/x", { name: "2026-27", startsOn: "2026-04-01", endsOn: "2027-03-31", expectedVersion: 1 })).statusCode, 400);
-  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["student"])).statusCode, 403);
-  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classSectionId: key, expectedVersion: 1 }, ["admin"], "https://evil.test")).statusCode, 403);
+  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classId: key, expectedVersion: 1 }, ["student"])).statusCode, 403);
+  assert.equal((await put("/api/enrollments/0b8e6f3a-6a2e-4f7e-9a51-2f1d3c4b5a69", { classId: key, expectedVersion: 1 }, ["admin"], "https://evil.test")).statusCode, 403);
   assert.equal(received.length, 0);
 });
 
