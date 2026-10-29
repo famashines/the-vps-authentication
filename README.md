@@ -33,6 +33,8 @@ checks the types.
 | POST   | `/api/classes/:classId/closure` | role `admin` | `CloseClassCommandPayloadV1` (`expectedVersion`), the same rules. 409 while the class has students |
 | POST   | `/api/enrollments`    | role `admin`  | `EnrollStudentCommandPayloadV1`, the same rules            |
 | PUT    | `/api/students/:studentId` | role `admin` | `UpdateStudentDetailsCommandPayloadV1` without `studentId` (the path gives it), the same rules. 409 when `expectedVersion` is old |
+| POST   | `/api/students/:studentId/leaving` | role `admin` | `MarkStudentLeftCommandPayloadV1` (`expectedVersion`, `leftOn`, optional `reason`), the same rules. 422 for a day in the future or before the registration day, 409 when the student has left |
+| POST   | `/api/students/:studentId/leaving/cancellation` | role `admin` | `CancelStudentLeavingCommandPayloadV1` (`expectedVersion`), the same rules. 409 when the student has not left |
 | PUT    | `/api/enrollments/:enrollmentId` | role `admin` | `ChangeStudentClassCommandPayloadV1` (`classId`, `expectedVersion`), the same rules |
 | PUT    | `/api/academic-years/:academicYearId` | role `admin` | `UpdateAcademicYearCommandPayloadV1`, the same rules |
 | GET    | `/api/fees/schedules` | role `admin`  | The fee schedules, from the fees service |

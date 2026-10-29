@@ -22,7 +22,7 @@ const received: Array<Record<string, any>> = [];
 const fakeAdmissions = Fastify();
 fakeAdmissions.get("/students", async () => [{ studentId: "s1" }]);
 fakeAdmissions.get("/academic-years", async () => [{ academicYearId: "y1", name: "2026-27", classes: [] }]);
-for (const path of ["open-academic-year", "open-class", "close-class", "enroll-student", "update-student-details", "change-student-class", "update-academic-year"]) {
+for (const path of ["open-academic-year", "open-class", "close-class", "enroll-student", "update-student-details", "change-student-class", "update-academic-year", "mark-student-left", "cancel-student-leaving"]) {
   fakeAdmissions.post(`/commands/${path}`, async (request, reply) => {
     received.push({ path, ...(request.body as Record<string, any>) });
     return reply.code(201).send({ ok: path });
@@ -211,12 +211,18 @@ test("enrollment routes: each command goes to its admissions path with its type"
   assert.equal((await post("/api/classes", opened)).statusCode, 201);
   assert.equal((await post("/api/enrollments", enroll)).statusCode, 201);
   assert.equal((await post(`/api/classes/${enroll.classId}/closure`, { expectedVersion: 1 })).statusCode, 201);
+  assert.equal((await post(`/api/students/${enroll.studentId}/leaving`, { expectedVersion: 2, leftOn: "2026-09-15" })).statusCode, 201);
+  assert.equal((await post(`/api/students/${enroll.studentId}/leaving/cancellation`, { expectedVersion: 3 })).statusCode, 201);
   assert.deepEqual(
     received.map((r) => `${r.path} ${r.commandType} ${r.issuedBy}`),
-    ["open-academic-year admissions.OpenAcademicYear u1", "open-class admissions.OpenClass u1", "enroll-student admissions.EnrollStudent u1", "close-class admissions.CloseClass u1"],
+    ["open-academic-year admissions.OpenAcademicYear u1", "open-class admissions.OpenClass u1", "enroll-student admissions.EnrollStudent u1", "close-class admissions.CloseClass u1",
+      "mark-student-left admissions.MarkStudentLeft u1", "cancel-student-leaving admissions.CancelStudentLeaving u1"],
   );
   assert.deepEqual(received[2].payload, enroll);
   assert.deepEqual(received[3].payload, { classId: enroll.classId, expectedVersion: 1 });
+  assert.deepEqual(received[4].payload, { studentId: enroll.studentId, expectedVersion: 2, leftOn: "2026-09-15" });
+  const future = await post(`/api/students/${enroll.studentId}/leaving`, { expectedVersion: 2, leftOn: "15 Sep", reason: " x " });
+  assert.deepEqual(future.json().fields.map((f: { field: string }) => f.field).sort(), ["leftOn", "reason"]);
 });
 
 test("enrollment routes: wrong payloads come back by field, students get 403, the list is proxied", async () => {

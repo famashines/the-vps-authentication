@@ -183,6 +183,8 @@ export function buildApp(settings: Settings, options: FastifyServerOptions = {})
   command("POST", "/api/classes/:classId/closure", "admissions.CloseClass", valid.validCloseClass, "/commands/close-class");
   command("POST", "/api/enrollments", "admissions.EnrollStudent", valid.validEnrollStudent, "/commands/enroll-student");
   command("PUT", "/api/students/:studentId", "admissions.UpdateStudentDetails", valid.validUpdateStudentDetails, "/commands/update-student-details");
+  command("POST", "/api/students/:studentId/leaving", "admissions.MarkStudentLeft", valid.validMarkStudentLeft, "/commands/mark-student-left");
+  command("POST", "/api/students/:studentId/leaving/cancellation", "admissions.CancelStudentLeaving", valid.validCancelStudentLeaving, "/commands/cancel-student-leaving");
   command("PUT", "/api/enrollments/:enrollmentId", "admissions.ChangeStudentClass", valid.validChangeStudentClass, "/commands/change-student-class");
   command("PUT", "/api/academic-years/:academicYearId", "admissions.UpdateAcademicYear", valid.validUpdateAcademicYear, "/commands/update-academic-year");
 
