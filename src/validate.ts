@@ -1,7 +1,9 @@
 import {
+  CancelStudentLeavingCommandPayloadV1Schema,
   ChangeStudentClassCommandPayloadV1Schema,
   CloseClassCommandPayloadV1Schema,
   EnrollStudentCommandPayloadV1Schema,
+  MarkStudentLeftCommandPayloadV1Schema,
   OpenAcademicYearCommandPayloadV1Schema,
   OpenClassCommandPayloadV1Schema,
   RegisterStudentCommandPayloadV1Schema,
@@ -28,6 +30,8 @@ export const validEnrollStudent = compile(EnrollStudentCommandPayloadV1Schema);
 export const validUpdateStudentDetails = compile(UpdateStudentDetailsCommandPayloadV1Schema);
 export const validChangeStudentClass = compile(ChangeStudentClassCommandPayloadV1Schema);
 export const validUpdateAcademicYear = compile(UpdateAcademicYearCommandPayloadV1Schema);
+export const validMarkStudentLeft = compile(MarkStudentLeftCommandPayloadV1Schema);
+export const validCancelStudentLeaving = compile(CancelStudentLeavingCommandPayloadV1Schema);
 export const validSetFeeSchedule = compile(SetFeeScheduleCommandPayloadV1Schema);
 export const validReceivePayment = compile(ReceivePaymentCommandPayloadV1Schema);
 export const validReverseCharge = compile(ReverseChargeCommandPayloadV1Schema);
