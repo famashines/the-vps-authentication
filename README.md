@@ -65,6 +65,30 @@ must have `Origin` equal to `APP_URL`.
 | `ADMISSIONS_URL`     | `http://the-vps-admissions`                 |
 | `FEES_URL`           | `http://the-vps-fees`                       |
 
+## Telemetry
+
+`npm start` loads `src/telemetry.ts` first (`node --import`). It is the same
+file in the 3 services:
+
+- Traces: OpenTelemetry, OTLP HTTP to Tempo. Spans for each request (http
+  and `@fastify/otel`, with `http.route`), for each call to a service
+  (undici, with the `traceparent` header) and for each SQL query (pg). The
+  health and ready probes are not traced.
+- Metrics: a Prometheus exporter on port `9464` (`METRICS_PORT`), for example
+  `http_server_request_duration_seconds` by `http_route`, never by the raw path.
+- Logs: each line has `trace_id` and `span_id` when a span is active, so a log
+  line in Loki links to its trace in Tempo.
+
+| Variable                      | Example                                  |
+| ----------------------------- | ---------------------------------------- |
+| `OTEL_SERVICE_NAME`           | `the-vps-gateway`                        |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://tempo.monitoring.svc:4318`       |
+| `OTEL_RESOURCE_ATTRIBUTES`    | `deployment.environment.name=the-vps-dev` |
+| `OTEL_SDK_DISABLED`           | `true` turns the telemetry off           |
+
+The tests import `app.ts` and do not load the telemetry. At shutdown, the spans
+of the last 5 seconds can be lost.
+
 ## Release
 
 A merge to `main` builds `ghcr.io/famashines/the-vps-gateway:sha-<commit>`
