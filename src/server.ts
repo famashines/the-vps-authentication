@@ -1,3 +1,4 @@
+import { trace } from "@opentelemetry/api";
 import { buildApp } from "./app.ts";
 
 const env = (name: string) => {
@@ -16,7 +17,14 @@ const app = buildApp(
     admissionsUrl: env("ADMISSIONS_URL"),
     feesUrl: env("FEES_URL"),
   },
-  { logger: true },
+  {
+    logger: {
+      mixin: () => {
+        const span = trace.getActiveSpan()?.spanContext();
+        return span ? { trace_id: span.traceId, span_id: span.spanId } : {};
+      },
+    },
+  },
 );
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
